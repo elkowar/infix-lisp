@@ -5,7 +5,7 @@ import           Eval
 
 main :: IO ()
 main = do
-  testEvalExp "((nil readInt nil) * 10)"
+  testEvalExp "1"
 
 
 

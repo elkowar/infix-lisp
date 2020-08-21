@@ -21,6 +21,7 @@ import           Control.Applicative            ( (<|>) )
 
 
 data NExp = ExpInBinding NIdent NExp NExp
+          | ExpThenElse NExp NExp NExp
           | ExpInvocation NExp NExp NExp
           | ExpLambda NIdent NExp NIdent
           | ExpLit NLiteral
@@ -29,6 +30,7 @@ data NExp = ExpInBinding NIdent NExp NExp
 
 data NLiteral = IntLit Int
               | StringLit String
+              | BoolLit Bool
               | NilLit deriving (Eq)
 newtype NIdent = Ident String deriving (Eq)
 
@@ -36,16 +38,27 @@ instance Show NIdent where
   show (Ident s) = s
 
 instance Show NLiteral where
-  show (IntLit    num) = show num
-  show (StringLit str) = show str
-  show NilLit          = "nil"
+  show (IntLit    num ) = show num
+  show (StringLit str ) = show str
+  show (BoolLit   bool) = if bool then "true" else "false"
+  show NilLit           = "nil"
 
 
 instance Show NExp where
-  show (ExpInBinding name value exp) =
-    unwords ["( {", show name, "=", show value, "} in", show exp, ")"]
+  show (ExpThenElse cond yesBody noBody) = unwords
+    [ "ThenElse"
+    , "("
+    , show cond
+    , "then ("
+    , show yesBody
+    , "else"
+    , show noBody
+    , "))"
+    ]
+  show (ExpInBinding name value exp) = unwords
+    ["InBinding", "( {", show name, "=", show value, "} in", show exp, ")"]
   show (ExpInvocation exp1 ident exp2) =
-    unwords ["(", show exp1, show ident, show exp2, ")"]
+    unwords ["Invocation", "(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
     unwords ["[", show arg1, show body, show arg2, "]"]
   show (ExpLit   lit  ) = show lit
@@ -64,6 +77,7 @@ parse = P.runParser parseExp ""
 parseExp :: Parser NExp
 parseExp = P.choice
   [ P.try parseInBinding
+  , P.try parseThenElse
   , P.try parseExpInvocation
   , parseLambda
   , ExpLit <$> parseLit
@@ -100,6 +114,18 @@ parseExp = P.choice
     pure $ ExpInBinding name valueExp body
 
 
+  parseThenElse :: Parser NExp
+  parseThenElse = P.label "then-else" $ parens $ do
+    condExp <- parseExp
+    surroundedBy (P.some hiddenSpaceChar) (P.string "then")
+    (yesExp, noExp) <- parens $ do
+      yesExp <- parseExp
+      surroundedBy (P.some hiddenSpaceChar) $ P.string "else"
+      noExp <- parseExp
+      pure (yesExp, noExp)
+    pure $ ExpThenElse condExp yesExp noExp
+
+
   invokableExpBlock :: Parser NExp
   invokableExpBlock =
     P.choice [parseExpInvocation, parseLambda, ExpIdent <$> parseIdent]
@@ -114,14 +140,23 @@ parseIdent = P.label "identifier" $ P.choice
 
 parseLit :: Parser NLiteral
 parseLit = P.label "literal" $ P.choice
-  [IntLit <$> P.try parseInt, parseStringLit, NilLit <$ P.string "nil"]
+  [ parseStringLit
+  , parseBoolLit
+  , IntLit <$> P.try parseInt
+  , NilLit <$ P.string "nil"
+  ]
  where
   parseStringLit :: Parser NLiteral
   parseStringLit =
     StringLit <$> (P.char '"' *> P.manyTill L.charLiteral (P.char '"'))
 
+  parseBoolLit :: Parser NLiteral
+  parseBoolLit = P.choice
+    [BoolLit True <$ P.string "true", BoolLit False <$ P.string "false"]
+
   parseInt :: Parser Int
   parseInt = L.signed (pure ()) L.decimal
+
 
 
 ignoreSpaces :: Parser ()

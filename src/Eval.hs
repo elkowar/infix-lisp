@@ -10,13 +10,18 @@ import           Data.Bifunctor                 ( bimap
                                                 )
 
 
-data Value = VPrim Primitive | VFunction Function
-data Primitive = VNum Int | VStr String | VNil
-data Function = Builtin (Value -> Value -> IO Value) | Lambda String NExp String
+data Value = VPrim Primitive | VFunction Function deriving (Eq)
+data Primitive = VNum Int | VStr String | VBool Bool | VNil deriving (Eq)
+data Function = Builtin (Value -> Value -> IO Value) | Lambda Env String NExp String
+
+instance Eq Function where
+  (==) (Lambda _ a1 exp1 b1) (Lambda _ a2 exp2 b2) = (a2, exp2, b2) == (a2, exp2, b2)
+  (==) _ _ = False
 
 pattern PatNum a = VPrim (VNum a)
 pattern PatStr a = VPrim (VStr a)
-pattern PatLambda a b c = VFunction (Lambda a b c)
+pattern PatBool a = VPrim (VBool a)
+pattern PatLambda a b c d = VFunction (Lambda a b c d)
 pattern PatBuiltin f = VFunction (Builtin f)
 
 instance Show Value where
@@ -26,11 +31,12 @@ instance Show Value where
 instance Show Primitive where
   show (VNum n) = if n == 69 then "69,... nice!" else show n
   show (VStr s) = s
-  show VNil = "hil"
+  show (VBool b) = show b
+  show VNil = "nil"
 
 instance Show Function where
   show (Builtin _        ) = "builtin"
-  show (Lambda a1 body a2) = unwords ["[", a1, show body, a2, "]"]
+  show (Lambda env a1 body a2) = unwords ["[", a1, show body, a2, "]"]
 
 newtype Env = Env [(String , Value)] deriving (Show, Semigroup, Monoid)
 
@@ -38,8 +44,8 @@ newtype Env = Env [(String , Value)] deriving (Show, Semigroup, Monoid)
 
 runFunction :: Function -> Env -> Value -> Value -> IO Value
 runFunction (Builtin f) _ arg1 arg2 = f arg1 arg2
-runFunction (Lambda argName1 exp argName2) env arg1 arg2 =
-  evalExp (env <> Env [(argName1, arg1), (argName2, arg2)]) exp
+runFunction (Lambda lambdaEnv argName1 exp argName2) env arg1 arg2 =
+  evalExp (Env [(argName1, arg1), (argName2, arg2)] <> lambdaEnv <> env) exp
 
 
 
@@ -48,6 +54,7 @@ builtins =
   [ ("+"    , Builtin builtinPlus)
   , ("-"    , Builtin builtinMinus)
   , ("*"    , Builtin builtinTimes)
+  , ("==", Builtin builtinEq)
   , ("print", Builtin builtinPrint)
   , ("readString", Builtin builtinReadString)
   , ("readInt", Builtin builtinReadInt)
@@ -63,11 +70,12 @@ builtins =
   builtinTimes (PatNum a) (PatNum b) = pure . PatNum $ a * b
   builtinTimes a b = illegalFunctionArguments "*" [a, b]
 
-  builtinPrint _ value = let str = case value of
-                                     PatStr s -> s
-                                     PatNum n -> show n
-                                     VPrim VNil -> "nil"
-                                     x -> show x
+  builtinEq a b = pure . PatBool $ a == b
+
+  builtinPrint _ value = let str = case value of PatStr s -> s
+                                                 PatNum n -> show n
+                                                 VPrim VNil -> "nil"
+                                                 x -> show x
                           in putStrLn str >> pure (VPrim VNil)
 
   builtinReadString _ _ = PatStr <$> getLine
@@ -89,7 +97,7 @@ evalExp env expression = case expression of
   ExpIdent (Ident ident) -> pure $ envLookup env ident
 
   ExpLambda (Ident argName1) body (Ident argName2) ->
-    pure $ VFunction $ Lambda argName1 body argName2
+    pure $ VFunction $ Lambda env argName1 body argName2
 
   ExpInvocation arg1 exp arg2 -> evalExp env exp >>= \case
     VFunction func -> do
@@ -100,18 +108,30 @@ evalExp env expression = case expression of
 
   ExpInBinding (Ident name) valueExp blockExp -> do
     storedValue <- evalExp env valueExp
-    evalExp (env <> Env [(name, storedValue)]) blockExp
+    evalExp (Env [(name, storedValue)] <> env) blockExp
+
+  ExpThenElse condExp yesExp noExp -> do
+    condResult <- evalExp env condExp
+    case condResult of
+      PatBool True -> evalExp env yesExp
+      PatBool False -> evalExp env noExp
+      _ -> error $ "condition " ++ show condResult ++ " is not a boolean"
 
 
 
 fromLiteral :: NLiteral -> Value
-fromLiteral (StringLit s) = VPrim $ VStr s
-fromLiteral (IntLit    n) = VPrim $ VNum n
+fromLiteral lit = case lit of 
+  StringLit s -> VPrim $ VStr s
+  IntLit    n -> VPrim $ VNum n
+  BoolLit   b -> VPrim $ VBool b
 
 envLookup :: Env -> String -> Value
-envLookup (Env env) name = maybe (VPrim VNil) snd
-  $ L.find (\(n, _) -> n == name) envWithBuiltins
-  where envWithBuiltins = env ++ map (second VFunction) builtins
+envLookup (Env env) name = case result of
+    Just value -> snd value
+    Nothing -> error $ "Variable " ++ name ++ " is not in scope."
+  where 
+    envWithBuiltins = env ++ map (second VFunction) builtins
+    result = L.find (\(n, _) -> n == name) envWithBuiltins 
 
 orNil :: Maybe Value -> Value
 orNil = fromMaybe (VPrim VNil)
