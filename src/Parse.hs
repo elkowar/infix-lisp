@@ -43,7 +43,7 @@ instance Show NLiteral where
 
 instance Show NExp where
   show (ExpInBinding name value exp) =
-    unwords ["( (", show name, "=", show value, ") in", show exp]
+    unwords ["( {", show name, "=", show value, "} in", show exp, ")"]
   show (ExpInvocation exp1 ident exp2) =
     unwords ["(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
@@ -63,7 +63,8 @@ parse = P.runParser parseExp ""
 
 parseExp :: Parser NExp
 parseExp = P.choice
-  [ parseExpInvocation
+  [ P.try parseInBinding
+  , P.try parseExpInvocation
   , parseLambda
   , ExpLit <$> parseLit
   , ExpIdent <$> parseIdent
@@ -86,6 +87,18 @@ parseExp = P.choice
       <$> (parseIdent <?> "identifier")
       <*> surroundedBy (P.some hiddenSpaceChar) parseExp
       <*> (parseIdent <?> "identifier")
+
+  parseInBinding :: Parser NExp
+  parseInBinding = P.label "in-binding" $ parens $ do
+    (name, valueExp) <- parens $ do
+      name <- parseIdent
+      surroundedByMany hiddenSpaceChar (P.char '=')
+      valueExp <- parseExp
+      pure (name, valueExp)
+    surroundedBy (P.some hiddenSpaceChar) $ P.string "in"
+    body <- parseExp
+    pure $ ExpInBinding name valueExp body
+
 
   invokableExpBlock :: Parser NExp
   invokableExpBlock =
@@ -120,6 +133,8 @@ hiddenSpaceChar = P.hidden P.spaceChar
 parens = P.between (P.char '(') (P.char ')') . surroundedByMany hiddenSpaceChar
 brackets =
   P.between (P.char '[') (P.char ']') . surroundedByMany hiddenSpaceChar
+curlies =
+  P.between (P.char '{') (P.char '}') . surroundedByMany hiddenSpaceChar
 
 surroundedBy :: Parser s -> Parser a -> Parser a
 surroundedBy surround p = surround *> p <* surround
