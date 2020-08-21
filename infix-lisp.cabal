@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: bdfebbac5049de0bce61f84980410cafae1674de14c43129f4a36fb8389c1a56
+-- hash: e38c418409a5a1abe8d2ed7354bfe780b0a54eaaa095bfb0f87caf6390906213
 
 name:           infix-lisp
 version:        0.1.0.0
@@ -36,7 +36,7 @@ library
       src
   build-depends:
       base >=4.7 && <5
-    , parsec >=3.1.14 && <=4
+    , megaparsec >=8.0.0 && <8.1
   default-language: Haskell2010
 
 executable infix-lisp-exe
@@ -49,7 +49,7 @@ executable infix-lisp-exe
   build-depends:
       base >=4.7 && <5
     , infix-lisp
-    , parsec >=3.1.14 && <=4
+    , megaparsec >=8.0.0 && <8.1
   default-language: Haskell2010
 
 test-suite infix-lisp-test
@@ -63,5 +63,5 @@ test-suite infix-lisp-test
   build-depends:
       base >=4.7 && <5
     , infix-lisp
-    , parsec >=3.1.14 && <=4
+    , megaparsec >=8.0.0 && <8.1
   default-language: Haskell2010

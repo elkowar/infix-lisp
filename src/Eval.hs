@@ -44,9 +44,9 @@ illegalFunctionArguments functionName args =
 
 evalExp :: Env -> NExp -> Value
 evalExp env expression = case expression of
- (ExpLit    lit   ) -> fromLiteral lit
- (ExpIdent  ident ) -> envLookup env (getName ident)
- (ExpLambda lambda) -> error "unimplemented"
+ (ExpLit   lit                    ) -> fromLiteral lit
+ (ExpIdent ident                  ) -> envLookup env (getName ident)
+ (ExpLambda argName1 body argName2) -> error "unimplemented"
  (ExpInvocation arg1 name arg2) ->
   let funcValue = envLookup env $ getName name
   in  case funcValue of

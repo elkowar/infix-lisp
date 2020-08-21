@@ -6,8 +6,8 @@ import           Eval
 
 main :: IO ()
 main = do
-  testEval
-  --testParser
+  --testEval
+  testParser
 
 
 testEval = do

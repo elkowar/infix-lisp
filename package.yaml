@@ -21,7 +21,7 @@ description:         Please see the README on GitHub at <https://github.com/gith
 
 dependencies:
 - base >= 4.7 && < 5
-- parsec >= 3.1.14 && <= 4
+- megaparsec >= 8.0.0 && < 8.1
 
 library:
   source-dirs: src

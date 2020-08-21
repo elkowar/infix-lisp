@@ -2,22 +2,29 @@ module Parse
  ( NExp(..)
  , NLiteral(..)
  , NIdent(..)
- , NLambda(..)
  , parseTest
  , parse
  )
 where
 
-import qualified Text.Parsec                   as P
-import           Text.Parsec                    ( (<?>) )
-import           Data.Functor                   ( ($>) )
+import qualified Text.Megaparsec               as P
+import qualified Text.Megaparsec.Char          as P
+import qualified Text.Megaparsec.Char.Lexer    as L
+import           Text.Megaparsec                ( (<?>) )
+import           Data.Functor                   ( ($>)
+                                                , void
+                                                )
+import           Data.Void                      ( Void )
 
 
 
-data NExp = ExpInvocation NExp NIdent NExp | ExpLambda NLambda | ExpLit NLiteral | ExpIdent NIdent deriving (Eq)
+data NExp = ExpInvocation NExp NIdent NExp
+           | ExpLambda NIdent NExp NIdent
+           | ExpLit NLiteral
+           | ExpIdent NIdent
+           deriving (Eq)
 data NLiteral = IntLit Int | StringLit String deriving (Eq)
 newtype NIdent = Ident String deriving (Eq)
-data NLambda = Lambda NIdent NExp NIdent deriving (Eq)
 
 instance Show NIdent where
  show (Ident s) = s
@@ -26,83 +33,85 @@ instance Show NLiteral where
  show (IntLit    num) = show num
  show (StringLit str) = show str
 
-instance Show NLambda where
- show (Lambda arg1 body arg2) =
-  unwords ["(", show arg1, show body, show arg2, ")"]
 
 instance Show NExp where
- show (ExpLambda lambda) = show lambda
  show (ExpInvocation exp1 ident exp2) =
   unwords ["(", show exp1, show ident, show exp2, ")"]
+ show (ExpLambda arg1 body arg2) =
+  unwords ["[", show arg1, show body, show arg2, "]"]
  show (ExpLit   lit  ) = show lit
  show (ExpIdent ident) = show ident
 
 
-type Parser a = P.Parsec String () a
+type Parser = P.Parsec Void String
 
 parseTest :: String -> IO ()
 parseTest = P.parseTest parseExp
 
-parse = P.runParser parseExp () ""
+parse = P.runParser parseExp ""
+
 
 parseExp :: Parser NExp
 parseExp = P.choice
- [ P.try (ExpLambda <$> parseLambda)
+ [ P.try parseExpInvocation
+ , P.try parseLambda
  , P.try (ExpLit <$> parseLit)
- , P.try parseExpInvocation
  , P.try (ExpIdent <$> parseIdent)
  ]
  where
   parseExpInvocation :: Parser NExp
-  parseExpInvocation = named "invocation block" $ do
+  parseExpInvocation = P.label "invocation block" $ do
    P.char '('
-   P.spaces
+   ignoreSpaces
    invo <-
     ExpInvocation
     <$> parseExp
-    <*> surroundedBy (P.skipMany1 P.space) parseIdent
+    <*> surroundedBy (P.some P.spaceChar) parseIdent
     <*> parseExp
-   P.spaces
+   ignoreSpaces
    P.char ')'
    pure invo
 
-parseLambda :: Parser NLambda
-parseLambda = named "lambda" $ do
- P.char '['
- P.spaces
- lambda <-
-  Lambda
-  <$> (parseIdent <?> "identifier")
-  <*> surroundedBy (P.skipMany1 P.space) parseExp
-  <*> (parseIdent <?> "identifier")
- P.spaces
- P.char ']'
- pure lambda
+  parseLambda :: Parser NExp
+  parseLambda = P.label "lambda" $ do
+   P.char '['
+   ignoreSpaces
+   lambda <-
+    ExpLambda
+    <$> (parseIdent <?> "identifier")
+    <*> surroundedBy (P.some P.spaceChar) parseExp
+    <*> (parseIdent <?> "identifier")
+   ignoreSpaces
+   P.char ']'
+   pure lambda
 
 
 parseIdent :: Parser NIdent
-parseIdent = named "identifier" $ P.choice
- [ Ident <$> ((:) <$> P.letter <*> P.many P.alphaNum)
- , Ident <$> P.many1 (P.oneOf "/+.-*=$!%&,")
+parseIdent = P.label "identifier" $ P.choice
+ [ Ident <$> ((:) <$> P.letterChar <*> P.many P.alphaNumChar)
+ , Ident <$> P.some (P.oneOf "/+.-*=$!%&,")
  ]
 
 
 parseLit :: Parser NLiteral
-parseLit = named "literal" $ P.choice [IntLit <$> parseInt, parseStringLit]
+parseLit = P.label "literal" $ P.choice [IntLit <$> parseInt, parseStringLit]
  where
   parseStringLit :: Parser NLiteral
   parseStringLit =
-   StringLit <$> (symbol '"' *> P.manyTill P.anyChar (P.try $ symbol '"'))
+   StringLit <$> (P.char '"' *> P.manyTill L.charLiteral (P.char '"'))
 
   parseInt :: Parser Int
-  parseInt = read <$> P.many1 P.digit
+  parseInt = L.signed sc L.decimal
 
 
-symbol :: Char -> Parser ()
-symbol c = P.char c $> ()
+ignoreSpaces :: Parser ()
+ignoreSpaces = P.skipMany P.spaceChar
 
-surroundedBy :: Parser () -> Parser a -> Parser a
+surroundedBy :: Parser s -> Parser a -> Parser a
 surroundedBy surround p = surround *> p <* surround
 
 
-named = flip P.label
+sc = L.space (void P.spaceChar)
+             (L.skipLineComment "//")
+             (L.skipBlockComment "/*" "*/")
+
