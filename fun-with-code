@@ -1,0 +1,30 @@
+(
+  (num = (nil readInt nil)) 
+in 
+  (
+    (((num % 3) == 0) && ((num % 5) == 0))
+  then 
+    (
+      (nil print "FizzBuzz")
+    else 
+      (
+        ((num % 3) == 0)
+      then 
+        (
+          (nil print "Fizz")
+        else
+          (
+            ((num % 5) == 0)
+          then
+            (
+              (nil print "buzz")
+            else 
+              (nil print num)
+            )
+          )
+        )
+      )
+    )
+  )
+)
+((flip2 = [_ [a [b (a (b f c) d) c] d] f]) in ((x = [a [b ((a + b) + (c + d)) c] d]) in ("a" ("b" (nil flip2 x) "c") "d")))
