@@ -20,7 +20,8 @@ import           Control.Applicative            ( (<|>) )
 
 
 
-data NExp = ExpInvocation NExp NExp NExp
+data NExp = ExpInBinding NIdent NExp NExp
+          | ExpInvocation NExp NExp NExp
           | ExpLambda NIdent NExp NIdent
           | ExpLit NLiteral
           | ExpIdent NIdent
@@ -41,6 +42,8 @@ instance Show NLiteral where
 
 
 instance Show NExp where
+  show (ExpInBinding name value exp) =
+    unwords ["( (", show name, "=", show value, ") in", show exp]
   show (ExpInvocation exp1 ident exp2) =
     unwords ["(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
@@ -57,39 +60,36 @@ parseTest = P.parseTest parseExp
 parse = P.runParser parseExp ""
 
 
+
 parseExp :: Parser NExp
 parseExp = P.choice
-  [ P.try parseExpInvocation
-  , P.try parseLambda
-  , P.try (ExpLit <$> parseLit)
-  , P.try (ExpIdent <$> parseIdent)
+  [ parseExpInvocation
+  , parseLambda
+  , ExpLit <$> parseLit
+  , ExpIdent <$> parseIdent
   ]
  where
   parseExpInvocation :: Parser NExp
-  parseExpInvocation = P.label "invocation block" $ do
-    P.char '('
-    ignoreSpaces
-    invo <-
-      ExpInvocation
+  parseExpInvocation =
+    P.label "invocation block"
+      $   parens
+      $   ExpInvocation
       <$> parseExp
-      <*> surroundedBy (P.some P.spaceChar) (P.try parseExp)
+      <*> surroundedBy (P.some hiddenSpaceChar) invokableExpBlock
       <*> parseExp
-    ignoreSpaces
-    P.char ')'
-    pure invo
 
   parseLambda :: Parser NExp
-  parseLambda = P.label "lambda" $ dbg "lambda" $ do
-    P.char '['
-    ignoreSpaces
-    lambda <-
-      ExpLambda
+  parseLambda =
+    P.label "lambda"
+      $   brackets
+      $   ExpLambda
       <$> (parseIdent <?> "identifier")
-      <*> surroundedBy (P.some P.spaceChar) parseExp
+      <*> surroundedBy (P.some hiddenSpaceChar) parseExp
       <*> (parseIdent <?> "identifier")
-    ignoreSpaces
-    P.char ']'
-    pure lambda
+
+  invokableExpBlock :: Parser NExp
+  invokableExpBlock =
+    P.choice [parseExpInvocation, parseLambda, ExpIdent <$> parseIdent]
 
 
 parseIdent :: Parser NIdent
@@ -100,25 +100,35 @@ parseIdent = P.label "identifier" $ P.choice
 
 
 parseLit :: Parser NLiteral
-parseLit = P.label "literal"
-  $ P.choice [IntLit <$> parseInt, parseStringLit, NilLit <$ P.string "nil"]
+parseLit = P.label "literal" $ P.choice
+  [IntLit <$> P.try parseInt, parseStringLit, NilLit <$ P.string "nil"]
  where
   parseStringLit :: Parser NLiteral
   parseStringLit =
     StringLit <$> (P.char '"' *> P.manyTill L.charLiteral (P.char '"'))
 
   parseInt :: Parser Int
-  parseInt = L.signed sc L.decimal
+  parseInt = L.signed (pure ()) L.decimal
 
 
 ignoreSpaces :: Parser ()
-ignoreSpaces = P.skipMany P.spaceChar
+ignoreSpaces = P.skipMany hiddenSpaceChar
+
+hiddenSpaceChar :: Parser Char
+hiddenSpaceChar = P.hidden P.spaceChar
+
+parens = P.between (P.char '(') (P.char ')') . surroundedByMany hiddenSpaceChar
+brackets =
+  P.between (P.char '[') (P.char ']') . surroundedByMany hiddenSpaceChar
 
 surroundedBy :: Parser s -> Parser a -> Parser a
 surroundedBy surround p = surround *> p <* surround
 
+surroundedByMany :: Parser s -> Parser a -> Parser a
+surroundedByMany surround p = P.skipMany surround *> p <* P.skipMany surround
 
-sc = L.space (void P.spaceChar)
+sc :: Parser ()
+sc = L.space (void hiddenSpaceChar)
              (L.skipLineComment "//")
              (L.skipBlockComment "/*" "*/")
 
