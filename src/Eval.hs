@@ -51,9 +51,15 @@ runFunction (Lambda lambdaEnv argName1 exp argName2) env arg1 arg2 =
 
 builtins :: [(String, Function)]
 builtins =
-  [ ("+"    , Builtin builtinPlus)
-  , ("-"    , Builtin builtinMinus)
-  , ("*"    , Builtin builtinTimes)
+  [ ("+", Builtin builtinPlus)
+  , ("-", Builtin builtinMinus)
+  , ("*", Builtin builtinTimes)
+  , ("/", Builtin builtinDiv)
+  , ("%", Builtin builtinMod)
+  , ("<", Builtin builtinLT)
+  , (">", Builtin builtinGT)
+  , ("&&", Builtin builtinAnd)
+  , ("||", Builtin builtinOr)
   , ("==", Builtin builtinEq)
   , ("print", Builtin builtinPrint)
   , ("readString", Builtin builtinReadString)
@@ -64,14 +70,18 @@ builtins =
   builtinPlus (PatStr a) (PatStr b) = pure . PatStr $ a ++ b
   builtinPlus a b = illegalFunctionArguments "+" [a, b]
 
-  builtinMinus (PatNum a) (PatNum b) = pure . PatNum $ a - b
-  builtinMinus a b = illegalFunctionArguments "-" [a, b]
-
-  builtinTimes (PatNum a) (PatNum b) = pure . PatNum $ a * b
-  builtinTimes a b = illegalFunctionArguments "*" [a, b]
+  builtinMinus = numFunc "-" $ \a b -> PatNum $ a - b
+  builtinTimes = numFunc "*" $ \a b -> PatNum $ a * b
+  builtinMod   = numFunc "%" $ \a b -> PatNum $ a `mod` b
+  builtinDiv   = numFunc "/" $ \a b -> PatNum $ a `div` b
+  builtinLT    = numFunc "<" $ \a b -> PatBool $ a < b
+  builtinGT    = numFunc ">" $ \a b -> PatBool $ a > b
+  
+  builtinAnd = boolFunc "&&" (&&)
+  builtinOr  = boolFunc "||" (||)
 
   builtinEq a b = pure . PatBool $ a == b
-
+  
   builtinPrint _ value = let str = case value of PatStr s -> s
                                                  PatNum n -> show n
                                                  VPrim VNil -> "nil"
@@ -80,6 +90,15 @@ builtins =
 
   builtinReadString _ _ = PatStr <$> getLine
   builtinReadInt _ _ = PatNum <$> readLn
+
+  boolFunc :: String -> (Bool -> Bool -> Bool) -> Value -> Value -> IO Value
+  boolFunc name f (PatBool a) (PatBool b) = pure . PatBool $ f a b
+  boolFunc name f a b = illegalFunctionArguments name [a, b]
+
+  numFunc :: String -> (Int -> Int -> Value) -> Value -> Value -> IO Value
+  numFunc name f (PatNum a) (PatNum b) = pure $ f a b
+  numFunc name f a b = illegalFunctionArguments name [a, b]
+
 
 
 
