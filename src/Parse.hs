@@ -4,6 +4,7 @@ module Parse
  , NIdent(..)
  , NLambda(..)
  , parseTest
+ , parse
  )
 where
 
@@ -42,6 +43,7 @@ type Parser a = P.Parsec String () a
 parseTest :: String -> IO ()
 parseTest = P.parseTest parseExp
 
+parse = P.runParser parseExp () ""
 
 parseExp :: Parser NExp
 parseExp = P.choice

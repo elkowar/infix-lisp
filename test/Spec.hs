@@ -11,12 +11,19 @@ main = do
 
 
 testEval = do
-  testEvalExp [("a", VPrimitive (VNumber 12))] (ExpIdent (Ident "a"))
-  testEvalExp [] (ExpLit (StringLit "a"))
+  testEvalExp [("a", VPrim (VNum 12))] "a"
+  testEvalExp []                       "\"a\""
+  testEvalExp []                       "(1 + 5)"
+  testEvalExp []                       "((1 + 2) + 5)"
 
 
 
-testEvalExp env exp = print $ evalExp (Env env) exp
+
+trustMe :: Either a b -> b
+trustMe (Right x) = x
+trustMe (Left  _) = error "YOU LIED TO ME"
+
+testEvalExp env s = print $ evalExp (Env env) $ trustMe $ parse s
 
 
 
