@@ -10,6 +10,7 @@ import qualified Text.Megaparsec.Error
 import           Types
 import qualified Data.Text                     as T
 import           System.Console.Repline
+import           System.Environment
 
 type Repl a = HaskelineT IO a
 
@@ -31,8 +32,15 @@ repl :: IO ()
 repl = evalRepl (pure ">>> ") cmd [] Nothing (Word completer) ini
 
 main :: IO ()
-main = repl
+main = do
+  args <- getArgs
+  if null args then repl else runFile (head args)
 
+runFile :: String -> IO ()
+runFile path = do
+  code   <- readFile path
+  result <- testEvalExp code
+  pure ()
 
 
 trustMe (Right x) = x

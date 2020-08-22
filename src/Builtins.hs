@@ -24,6 +24,7 @@ builtins = M.fromList
   , (","         , Builtin builtinMakeTuple)
   , ("fst"       , Builtin builtinTupleFirst)
   , ("snd"       , Builtin builtinTupleSecond)
+  , ("toCharList", Builtin builtinToCharList)
   , ("print"     , Builtin builtinPrint)
   , ("readString", Builtin builtinReadString)
   , ("readInt"   , Builtin builtinReadInt)
@@ -64,6 +65,12 @@ builtins = M.fromList
 
   builtinTupleSecond _ (VTuple _ b) = pure b
   builtinTupleSecond a b            = illegalFunctionArguments "snd" [a, b]
+
+  builtinToCharList :: Value -> Value -> IO Value
+  builtinToCharList _ (VStr str) = case str of
+    (x : xs) -> VTuple (VStr [x]) <$> builtinToCharList VNil (VStr xs)
+    []       -> pure VNil
+  builtinToCharList a b = illegalFunctionArguments "toCharList" [a, b]
 
   boolFunc :: String -> (Bool -> Bool -> Bool) -> Value -> Value -> IO Value
   boolFunc _    f (VBool a) (VBool b) = pure . VBool $ f a b

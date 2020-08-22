@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports -fno-warn-missing-signatures #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Parse
   ( NExp(..)
   , NLiteral(..)
@@ -20,6 +21,7 @@ import           Data.Functor                   ( ($>)
 import           Data.Void                      ( Void )
 import           Control.Applicative            ( (<|>) )
 import qualified Data.Text                     as T
+import           Data.List                      ( intercalate )
 
 data NExp = ExpInBinding [(NIdent, NExp)] NExp
           | ExpCondition NExp NExp NExp
@@ -50,8 +52,13 @@ instance Show NLiteral where
 instance Show NExp where
   show (ExpCondition yesBody cond noBody) =
     unwords ["(", show yesBody, "<", show cond, ">", show noBody, ")"]
-  show (ExpInBinding bindings exp) =
-    unwords ["( {", show bindings, "} in", show exp, ")"] -- todo cleanup "showBindings"
+  show (ExpInBinding bindings exp) = unwords
+    [ "( {"
+    , intercalate ", " $ map (\(k, v) -> show k ++ " = " ++ show v) bindings
+    , "} in"
+    , show exp
+    , ")"
+    ]
   show (ExpInvocation exp1 ident exp2) =
     unwords ["(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
@@ -103,18 +110,21 @@ parseExp = P.choice
   parseInBinding = P.label "in-binding" $ parens
     (   ExpInBinding
     <$> parseMapLiteral
-    <*  surroundedBySome hiddenSpaceChar (P.string (T.pack "in"))
+    <*  surroundedBySome hiddenSpaceChar (P.string "in")
     <*> parseExp
     )
 
   parseMapLiteral :: Parser [(NIdent, NExp)]
   parseMapLiteral =
     P.label "map-literal"
-      $ curlies
-      $ surroundedByMany hiddenSpaceChar
-      $ P.sepEndBy1 parseSingleBinding
-                    (surroundedByMany hiddenSpaceChar (P.char ','))
+      . curlies
+      . surroundedByMany hiddenSpaceChar
+      $ parseMultipleBindings
    where
+    parseMultipleBindings = P.sepEndBy
+      parseSingleBinding
+      (P.try $ surroundedByMany hiddenSpaceChar (P.char ','))
+
     parseSingleBinding =
       (,)
         <$> parseIdent
@@ -150,7 +160,7 @@ parseExp = P.choice
 parseIdent :: Parser NIdent
 parseIdent = P.label "identifier" $ P.choice
   [ Ident <$> ((:) <$> P.letterChar <*> P.many P.alphaNumChar)
-  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,<>:")
+  , Ident <$> P.some (P.oneOf ("/+.-*=$!%&,<>:" :: String))
   ]
 
 parseIgnoredIdent :: Parser NIdent
@@ -161,7 +171,7 @@ parseLit = P.label "literal" $ P.choice
   [ parseStringLit
   , parseBoolLit
   , IntLit <$> P.try parseInt
-  , NilLit <$ P.string (T.pack "nil")
+  , NilLit <$ P.string "nil"
   ]
  where
   parseStringLit :: Parser NLiteral
@@ -173,9 +183,7 @@ parseLit = P.label "literal" $ P.choice
 
   parseBoolLit :: Parser NLiteral
   parseBoolLit = P.choice
-    [ BoolLit True <$ P.string (T.pack "true")
-    , BoolLit False <$ P.string (T.pack "false")
-    ]
+    [BoolLit True <$ P.string "true", BoolLit False <$ P.string "false"]
 
   parseInt :: Parser Int
   parseInt = L.signed (pure ()) L.decimal
@@ -185,10 +193,7 @@ hiddenSpaceChar :: Parser Char
 hiddenSpaceChar = P.hidden (P.spaceChar <|> parseComment)
  where
   parseComment =
-    ' '
-      <$ (  P.string (T.pack "/*")
-         *> P.manyTill L.charLiteral (P.string (T.pack "*/"))
-         )
+    ' ' <$ (P.string "/*" *> P.manyTill L.charLiteral (P.string "*/"))
 
 
 parens = betweenChars '(' ')' . surroundedByMany hiddenSpaceChar

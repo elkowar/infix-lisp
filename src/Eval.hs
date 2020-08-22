@@ -1,5 +1,5 @@
 {-# OPTIONS_GHC -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-missing-pattern-synonym-signatures #-}
-{-# LANGUAGE LambdaCase, PatternSynonyms #-}
+{-# LANGUAGE LambdaCase, PatternSynonyms, OverloadedStrings, QuasiQuotes #-}
 module Eval where
 
 import           Prelude                 hiding ( exp )
@@ -15,6 +15,7 @@ import           Types
 import qualified Data.Map.Strict               as M
 import qualified Data.Either
 import qualified Data.Text                     as T
+import           Data.String.QQ
 
 
 runFunction :: Function -> Env -> Value -> Value -> IO Value
@@ -75,9 +76,9 @@ evalBindings env ((name, exp) : xs) = do
 
 fromLiteral :: NLiteral -> Value
 fromLiteral lit = case lit of
-  StringLit s -> VStr s
-  IntLit    n -> VNum n
-  BoolLit   b -> VBool b
+  StringLit x -> VStr x
+  IntLit    x -> VNum x
+  BoolLit   x -> VBool x
   NilLit      -> VNil
 
 envLookup :: Env -> String -> Value
@@ -87,7 +88,7 @@ envLookup (Env env) name = case M.lookup name envWithBuiltins of
   where envWithBuiltins = env <> M.map VFunction builtins
 
 getName :: NIdent -> String
-getName (Ident s)    = s
+getName (Ident x)    = x
 getName IdentIgnored = error "tried to get the name of ignored identifier `_`"
 
 
@@ -95,17 +96,47 @@ stdlib :: IO Env
 stdlib = evalBindings mempty $ Data.Either.rights $ map
   (getParsed . second parse)
   [ ( "map"
-    , T.pack
-      "[tuple ( { tail = (_ snd tuple) , } in ( (_ f (_ fst tuple)) , ((tail map f) <(tail != nil)> nil))) f]"
+    , [s|
+        [tuple ( 
+          { tail = (_ snd tuple) , } 
+        in 
+          (
+            (_ f (_ fst tuple)) 
+          , 
+            ((tail map f) <(tail != nil)> nil)
+          )
+        ) f]
+      |]
+    )
+  , ( "filter"
+    , [s|
+        [tuple (
+          { head = (_ fst tuple)
+          , tail = (_ snd tuple) 
+          , filteredTail = ((tail filter cond) <(tail != nil)> nil) 
+          , } 
+          in 
+          ((head , filteredTail) <(_ cond head)> filteredTail) 
+        ) cond]
+      |]
     )
   , ( ":"
-    , T.pack
-      "[lower (lower , (((lower + 1) : upper) <(lower < upper)> nil)) upper]"
+    , [s| 
+        [lower ( lower , ( ((lower + 1) : upper) <(lower < upper)> nil)) upper]
+      |]
+    )
+  , ( "!!"
+    , [s| 
+        [tuple (
+          (_ fst tuple) 
+        <(idx == 0)> 
+          ((_ snd tuple) !! (idx - 1))
+        ) idx] 
+      |]
     )
   ]
-
-
-getParsed :: (a, Either e b) -> Either e (a, b)
-getParsed (a, Right b) = Right (a, b)
-getParsed (_, Left e ) = Left e
+ where
+  getParsed :: (a, Either e b) -> Either e (a, b)
+  getParsed (a, Right b) = Right (a, b)
+  getParsed (_, Left e ) = Left e
 
