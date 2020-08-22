@@ -62,14 +62,14 @@ type Parser = P.Parsec Void String
 parseTest :: String -> IO ()
 parseTest = P.parseTest parseExp
 
-parse = P.runParser parseExp ""
+parse = P.runParser (surroundedByMany hiddenSpaceChar parseExp) ""
 
 
 
 parseExp :: Parser NExp
 parseExp = P.choice
   [ P.try parseInBinding
-  , P.try parseThenElse
+  , P.try parseConditional
   , P.try parseExpInvocation
   , parseLambda
   , ExpLit <$> parseLit
@@ -106,13 +106,13 @@ parseExp = P.choice
     pure $ ExpInBinding name valueExp body
 
 
-  parseThenElse :: Parser NExp
-  parseThenElse =
+  parseConditional :: Parser NExp
+  parseConditional =
     P.label "condition"
       $   parens
       $   ExpCondition
       <$> parseExp
-      <*> (surroundedBySome hiddenSpaceChar . betweenChars '<' '>' $ parseExp)
+      <*> surroundedBySome hiddenSpaceChar (betweenChars '<' '>' parseExp)
       <*> parseExp
 
 
@@ -124,7 +124,7 @@ parseExp = P.choice
 parseIdent :: Parser NIdent
 parseIdent = P.label "identifier" $ P.choice
   [ Ident <$> ((:) <$> P.letterChar <*> P.many P.alphaNumChar)
-  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,_")
+  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,_<>:")
   ]
 
 
