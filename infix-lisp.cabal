@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: e38c418409a5a1abe8d2ed7354bfe780b0a54eaaa095bfb0f87caf6390906213
+-- hash: 14501e1ecec2f83ca78216c03048b4f0b512cf8878f66fe3a0128eb3e072d32b
 
 name:           infix-lisp
 version:        0.1.0.0
@@ -27,9 +27,11 @@ source-repository head
 
 library
   exposed-modules:
+      Builtins
       Eval
       Lib
       Parse
+      Types
   other-modules:
       Paths_infix_lisp
   hs-source-dirs:

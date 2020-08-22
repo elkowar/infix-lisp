@@ -4,6 +4,7 @@ import           Parse
 import           Eval
 import           Control.Monad                  ( when )
 import qualified Text.Megaparsec.Error
+import           Types
 
 main :: IO ()
 --main = do
