@@ -148,7 +148,7 @@ parseExp = P.choice
 parseIdent :: Parser NIdent
 parseIdent = P.label "identifier" $ P.choice
   [ Ident <$> ((:) <$> P.letterChar <*> P.many P.alphaNumChar)
-  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,<>:")
+  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,<>_:")
   ]
 
 

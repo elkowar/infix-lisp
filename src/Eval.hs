@@ -11,30 +11,30 @@ import           Data.Bifunctor                 ( bimap
                                                 )
 
 
-data Value = VPrim Primitive | VFunction Function | VTuple Value Value deriving (Eq)
-data Primitive = VNum Int | VStr String | VBool Bool | VNil deriving (Eq)
+data Value = VNum Int 
+           | VStr String 
+           | VBool Bool 
+           | VNil 
+           | VFunction Function 
+           | VTuple Value Value 
+           deriving (Eq)
 data Function = Builtin (Value -> Value -> IO Value) | Lambda Env String NExp String
 
 instance Eq Function where
   (==) (Lambda _ a1 exp1 b1) (Lambda _ a2 exp2 b2) = (a2, exp2, b2) == (a2, exp2, b2)
   (==) _ _ = False
 
-pattern PatNum a = VPrim (VNum a)
-pattern PatStr a = VPrim (VStr a)
-pattern PatBool a = VPrim (VBool a)
-pattern PatLambda a b c d = VFunction (Lambda a b c d)
-pattern PatBuiltin f = VFunction (Builtin f)
+pattern VLambda a b c d = VFunction (Lambda a b c d)
+pattern VBuiltin f = VFunction (Builtin f)
 
 instance Show Value where
-  show (VPrim p) = show p
   show (VFunction f) = show f
   show (VTuple a b) = show (a, b)
-
-instance Show Primitive where
-  show (VNum n) = if n == 69 then "69,... nice!" else show n
+  show (VNum n) = show n
   show (VStr s) = s
   show (VBool b) = show b
   show VNil = "nil"
+
 
 instance Show Function where
   show (Builtin _        ) = "builtin"
@@ -72,31 +72,31 @@ builtins =
   , ("readInt", Builtin builtinReadInt)
   ]
  where
-  builtinPlus (PatNum a) (PatNum b) = pure . PatNum $ a + b
-  builtinPlus (PatStr a) (PatStr b) = pure . PatStr $ a ++ b
+  builtinPlus (VNum a) (VNum b) = pure . VNum $ a + b
+  builtinPlus (VStr a) (VStr b) = pure . VStr $ a ++ b
   builtinPlus a b = illegalFunctionArguments "+" [a, b]
 
-  builtinMinus = numFunc "-" $ \a b -> PatNum $ a - b
-  builtinTimes = numFunc "*" $ \a b -> PatNum $ a * b
-  builtinMod   = numFunc "%" $ \a b -> PatNum $ a `mod` b
-  builtinDiv   = numFunc "/" $ \a b -> PatNum $ a `div` b
-  builtinLT    = numFunc "<" $ \a b -> PatBool $ a < b
-  builtinGT    = numFunc ">" $ \a b -> PatBool $ a > b
+  builtinMinus = numFunc "-" $ \a b -> VNum $ a - b
+  builtinTimes = numFunc "*" $ \a b -> VNum $ a * b
+  builtinMod   = numFunc "%" $ \a b -> VNum $ a `mod` b
+  builtinDiv   = numFunc "/" $ \a b -> VNum $ a `div` b
+  builtinLT    = numFunc "<" $ \a b -> VBool $ a < b
+  builtinGT    = numFunc ">" $ \a b -> VBool $ a > b
 
   builtinAnd = boolFunc "&&" (&&)
   builtinOr  = boolFunc "||" (||)
 
-  builtinEq a b = pure . PatBool $ a == b
-  builtinNeq a b = pure . PatBool $ a /= b
+  builtinEq a b = pure . VBool $ a == b
+  builtinNeq a b = pure . VBool $ a /= b
 
-  builtinPrint _ value = let str = case value of PatStr s -> s
-                                                 PatNum n -> show n
-                                                 VPrim VNil -> "nil"
+  builtinPrint _ value = let str = case value of VStr s -> s
+                                                 VNum n -> show n
+                                                 VNil -> "nil"
                                                  x -> show x
-                          in putStrLn str >> pure (VPrim VNil)
+                          in putStrLn str >> pure VNil
 
-  builtinReadString _ _ = PatStr <$> getLine
-  builtinReadInt _ _ = PatNum <$> readLn
+  builtinReadString _ _ = VStr <$> getLine
+  builtinReadInt _ _ = VNum <$> readLn
 
   builtinMakeTuple a b = pure $ VTuple a b
 
@@ -107,11 +107,11 @@ builtins =
   builtinTupleSecond a b = illegalFunctionArguments "snd" [a, b]
 
   boolFunc :: String -> (Bool -> Bool -> Bool) -> Value -> Value -> IO Value
-  boolFunc name f (PatBool a) (PatBool b) = pure . PatBool $ f a b
+  boolFunc name f (VBool a) (VBool b) = pure . VBool $ f a b
   boolFunc name f a b = illegalFunctionArguments name [a, b]
 
   numFunc :: String -> (Int -> Int -> Value) -> Value -> Value -> IO Value
-  numFunc name f (PatNum a) (PatNum b) = pure $ f a b
+  numFunc name f (VNum a) (VNum b) = pure $ f a b
   numFunc name f a b = illegalFunctionArguments name [a, b]
 
 
@@ -147,8 +147,8 @@ evalExp env expression = case expression of
   ExpCondition yesExp condExp noExp -> do
     condResult <- evalExp env condExp
     case condResult of
-      PatBool True -> evalExp env yesExp
-      PatBool False -> evalExp env noExp
+      VBool True -> evalExp env yesExp
+      VBool False -> evalExp env noExp
       _ -> error $ "condition " ++ show condResult ++ " is not a boolean"
 
 
@@ -163,10 +163,10 @@ evalBindings env ((name, exp):xs) = do
 
 fromLiteral :: NLiteral -> Value
 fromLiteral lit = case lit of
-  StringLit s -> VPrim $ VStr s
-  IntLit    n -> VPrim $ VNum n
-  BoolLit   b -> VPrim $ VBool b
-  NilLit      -> VPrim VNil
+  StringLit s -> VStr s
+  IntLit    n -> VNum n
+  BoolLit   b -> VBool b
+  NilLit      -> VNil
 
 envLookup :: Env -> String -> Value
 envLoopup _ "_" = error "Tried to look for variable '_' in environment, but '_' is not a valid identifier"
@@ -176,9 +176,6 @@ envLookup (Env env) name = case result of
   where
     envWithBuiltins = env ++ map (second VFunction) builtins
     result = L.find (\(n, _) -> n == name) envWithBuiltins
-
-orNil :: Maybe Value -> Value
-orNil = fromMaybe (VPrim VNil)
 
 
 getName :: NIdent -> String
