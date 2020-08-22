@@ -3,16 +3,17 @@
 module Types where
 
 import Parse
+import qualified Data.Map.Strict as M
 
 
-data Value = VNum Int
-           | VStr String
-           | VBool Bool
+data Value = VNum !Int
+           | VStr !String
+           | VBool !Bool
            | VNil
-           | VFunction Function
-           | VTuple Value Value
+           | VFunction !Function
+           | VTuple !Value !Value
            deriving (Eq)
-data Function = Builtin (Value -> Value -> IO Value) | Lambda Env NIdent NExp NIdent
+data Function = Builtin (Value -> Value -> IO Value) | Lambda Env !NIdent !NExp !NIdent
 
 instance Eq Function where
   (==) (Lambda _ a1 exp1 b1) (Lambda _ a2 exp2 b2) = (a1, exp1, b1) == (a2, exp2, b2)
@@ -34,7 +35,8 @@ instance Show Function where
   show (Builtin _        ) = "builtin"
   show (Lambda _ a1 body a2) = unwords ["[", show a1, show body, show a2, "]"]
 
-newtype Env = Env [(String , Value)] deriving (Show, Semigroup, Monoid)
+newtype Env = Env (M.Map String Value) deriving (Show, Semigroup)
 
-
-
+instance Monoid Env where
+  mappend (Env a) (Env b) = Env $ M.union a b
+  mempty = Env mempty

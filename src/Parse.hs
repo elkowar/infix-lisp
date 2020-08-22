@@ -19,6 +19,7 @@ import           Data.Functor                   ( ($>)
                                                 )
 import           Data.Void                      ( Void )
 import           Control.Applicative            ( (<|>) )
+import qualified Data.Text                     as T
 
 data NExp = ExpInBinding [(NIdent, NExp)] NExp
           | ExpCondition NExp NExp NExp
@@ -59,12 +60,12 @@ instance Show NExp where
   show (ExpIdent ident) = show ident
 
 
-type Parser = P.Parsec Void String
+type Parser = P.Parsec Void T.Text
 
 parseTest :: String -> IO ()
-parseTest = P.parseTest parseExp
+parseTest = P.parseTest parseExp . T.pack
 
-parse :: String -> Either (P.ParseErrorBundle String Void) NExp
+parse :: T.Text -> Either (P.ParseErrorBundle T.Text Void) NExp
 parse = P.runParser (surroundedByMany hiddenSpaceChar parseExp) ""
 
 
@@ -102,7 +103,7 @@ parseExp = P.choice
   parseInBinding = P.label "in-binding" $ parens
     (   ExpInBinding
     <$> parseMapLiteral
-    <*  surroundedBySome hiddenSpaceChar (P.string "in")
+    <*  surroundedBySome hiddenSpaceChar (P.string (T.pack "in"))
     <*> parseExp
     )
 
@@ -160,7 +161,7 @@ parseLit = P.label "literal" $ P.choice
   [ parseStringLit
   , parseBoolLit
   , IntLit <$> P.try parseInt
-  , NilLit <$ P.string "nil"
+  , NilLit <$ P.string (T.pack "nil")
   ]
  where
   parseStringLit :: Parser NLiteral
@@ -172,7 +173,9 @@ parseLit = P.label "literal" $ P.choice
 
   parseBoolLit :: Parser NLiteral
   parseBoolLit = P.choice
-    [BoolLit True <$ P.string "true", BoolLit False <$ P.string "false"]
+    [ BoolLit True <$ P.string (T.pack "true")
+    , BoolLit False <$ P.string (T.pack "false")
+    ]
 
   parseInt :: Parser Int
   parseInt = L.signed (pure ()) L.decimal
@@ -182,7 +185,10 @@ hiddenSpaceChar :: Parser Char
 hiddenSpaceChar = P.hidden (P.spaceChar <|> parseComment)
  where
   parseComment =
-    ' ' <$ (P.string "/*" *> P.manyTill L.charLiteral (P.string "*/"))
+    ' '
+      <$ (  P.string (T.pack "/*")
+         *> P.manyTill L.charLiteral (P.string (T.pack "*/"))
+         )
 
 
 parens = betweenChars '(' ')' . surroundedByMany hiddenSpaceChar

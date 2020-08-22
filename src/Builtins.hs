@@ -4,10 +4,12 @@ module Builtins
   )
 where
 import           Types
+import qualified Data.Map.Strict               as M
+import qualified Parse
 
 
-builtins :: [(String, Function)]
-builtins =
+builtins :: M.Map String Function
+builtins = M.fromList
   [ ("+"         , Builtin builtinPlus)
   , ("-"         , Builtin builtinMinus)
   , ("*"         , Builtin builtinTimes)
@@ -72,6 +74,8 @@ builtins =
   numFunc name _ a        b        = illegalFunctionArguments name [a, b]
 
 
+
 illegalFunctionArguments :: String -> [Value] -> a
 illegalFunctionArguments functionName args =
   error $ functionName ++ " called with illegal arguments " ++ show args
+

@@ -2,6 +2,7 @@
 import           Parse
 import           Eval
 import           Types
+import qualified Data.Text                     as T
 
 
 
@@ -35,9 +36,8 @@ trustMe (Left  _) = error "YOU LIED TO ME"
 
 testEvalExp :: String -> IO ()
 testEvalExp s = do
-  result <- evalExp (Env []) (trustMe $ parse s)
+  result <- evalExp mempty (trustMe $ parse $ T.pack s)
   putStrLn $ s ++ " ===> " ++ show result
-
 
 
 testParser = do

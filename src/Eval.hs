@@ -12,6 +12,9 @@ import           Data.Bifunctor                 ( bimap
                                                 )
 import           Builtins
 import           Types
+import qualified Data.Map.Strict               as M
+import qualified Data.Either
+import qualified Data.Text                     as T
 
 
 runFunction :: Function -> Env -> Value -> Value -> IO Value
@@ -20,12 +23,17 @@ runFunction (Lambda lambdaEnv argName1 exp argName2) env arg1 arg2 = evalExp
   (envFromArgs <> lambdaEnv <> env)
   exp
  where
-  envFromArgs = Env $ case (argName1, argName2) of
+  envFromArgs = Env $ M.fromList $ case (argName1, argName2) of
     (Ident a     , Ident b     ) -> [(a, arg1), (b, arg2)]
     (IdentIgnored, Ident b     ) -> [(b, arg2)]
     (Ident a     , IdentIgnored) -> [(a, arg1)]
     _                            -> []
 
+
+evalWithStdlib :: Env -> NExp -> IO Value
+evalWithStdlib env exp = do
+  stdEnv <- stdlib
+  evalExp (env <> stdEnv) exp
 
 
 evalExp :: Env -> NExp -> IO Value
@@ -46,7 +54,7 @@ evalExp env expression = case expression of
 
   ExpInBinding bindings blockExp -> do
     bindings' <- evalBindings env (fmap (first getName) bindings)
-    evalExp (Env bindings' <> env) blockExp
+    evalExp (bindings' <> env) blockExp
 
   ExpCondition yesExp condExp noExp -> do
     condResult <- evalExp env condExp
@@ -57,13 +65,13 @@ evalExp env expression = case expression of
 
 
 
-evalBindings :: Env -> [(String, NExp)] -> IO [(String, Value)]
-evalBindings _   []                 = pure []
+evalBindings :: Env -> [(String, NExp)] -> IO Env
+evalBindings _   []                 = pure mempty
 evalBindings env ((name, exp) : xs) = do
   result <- evalExp env exp
-  let newBinding = (name, result)
-  otherBindings <- evalBindings (env <> Env [newBinding]) xs
-  pure $ newBinding : otherBindings
+  let newEnv = Env (M.singleton name result) <> env
+  otherBindings <- evalBindings newEnv xs
+  pure $ Env (M.singleton name result) <> otherBindings
 
 fromLiteral :: NLiteral -> Value
 fromLiteral lit = case lit of
@@ -73,13 +81,31 @@ fromLiteral lit = case lit of
   NilLit      -> VNil
 
 envLookup :: Env -> String -> Value
-envLookup (Env env) name = case result of
-  Just value -> snd value
+envLookup (Env env) name = case M.lookup name envWithBuiltins of
+  Just value -> value
   Nothing    -> error $ "Variable `" ++ name ++ "` is not in scope."
- where
-  envWithBuiltins = env ++ map (second VFunction) builtins
-  result          = L.find (\(n, _) -> n == name) envWithBuiltins
+  where envWithBuiltins = env <> M.map VFunction builtins
 
 getName :: NIdent -> String
 getName (Ident s)    = s
 getName IdentIgnored = error "tried to get the name of ignored identifier `_`"
+
+
+stdlib :: IO Env
+stdlib = evalBindings mempty $ Data.Either.rights $ map
+  (getParsed . second parse)
+  [ ( "map"
+    , T.pack
+      "[tuple ( { tail = (_ snd tuple) , } in ( (_ f (_ fst tuple)) , ((tail map f) <(tail != nil)> nil))) f]"
+    )
+  , ( ":"
+    , T.pack
+      "[lower (lower , (((lower + 1) : upper) <(lower < upper)> nil)) upper]"
+    )
+  ]
+
+
+getParsed :: (a, Either e b) -> Either e (a, b)
+getParsed (a, Right b) = Right (a, b)
+getParsed (_, Left e ) = Left e
+
