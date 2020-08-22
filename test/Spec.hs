@@ -20,10 +20,8 @@ testEval = do
   testEvalExp "({ x = 1, } in (x + 2))"
   testEvalExp "({ add = [a (a + b) b], } in (2 add 5))"
   testEvalExp "(\"yes\" <(1 == 1)> \"no\")"
-  testEvalExp
-    "({not = [_ (false <value> true) value], } in (_ not true))"
-  testEvalExp
-    "({not = [_ (false <value> true) value], } in (_ not false))"
+  testEvalExp "({not = [_ (false <value> true) value], } in (nil not true))"
+  testEvalExp "({not = [_ (false <value> true) value], } in (nil not false))"
   testEvalExp "(1 [a (a + b) b] 1)"
   testEvalExp "({add4 = [a [b ((a + b) + (c + d)) c] d], } in (1 (1 add4 1) 1))"
 

@@ -1,3 +1,4 @@
+{-# OPTIONS_GHC -Wall -fno-warn-unused-imports -fno-warn-missing-signatures #-}
 module Parse
   ( NExp(..)
   , NLiteral(..)
@@ -7,6 +8,7 @@ module Parse
   )
 where
 
+import           Prelude                 hiding ( exp )
 import qualified Text.Megaparsec               as P
 import qualified Text.Megaparsec.Char          as P
 import qualified Text.Megaparsec.Char.Lexer    as L
@@ -18,13 +20,10 @@ import           Data.Functor                   ( ($>)
 import           Data.Void                      ( Void )
 import           Control.Applicative            ( (<|>) )
 
-
-
 data NExp = ExpInBinding [(NIdent, NExp)] NExp
           | ExpCondition NExp NExp NExp
           | ExpInvocation NExp NExp NExp
           | ExpLambda NIdent NExp NIdent
-          | ExpList [NExp]
           | ExpLit NLiteral
           | ExpIdent NIdent
           deriving (Eq)
@@ -33,10 +32,12 @@ data NLiteral = IntLit Int
               | StringLit String
               | BoolLit Bool
               | NilLit deriving (Eq)
-newtype NIdent = Ident String deriving (Eq)
+
+data NIdent = Ident String | IdentIgnored deriving (Eq)
 
 instance Show NIdent where
-  show (Ident s) = s
+  show (Ident s)    = s
+  show IdentIgnored = "_"
 
 instance Show NLiteral where
   show (IntLit    num ) = show num
@@ -54,9 +55,8 @@ instance Show NExp where
     unwords ["(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
     unwords ["[", show arg1, show body, show arg2, "]"]
-  show (ExpLit   lit     ) = show lit
-  show (ExpIdent ident   ) = show ident
-  show (ExpList  elements) = show elements
+  show (ExpLit   lit  ) = show lit
+  show (ExpIdent ident) = show ident
 
 
 type Parser = P.Parsec Void String
@@ -64,6 +64,7 @@ type Parser = P.Parsec Void String
 parseTest :: String -> IO ()
 parseTest = P.parseTest parseExp
 
+parse :: String -> Either (P.ParseErrorBundle String Void) NExp
 parse = P.runParser (surroundedByMany hiddenSpaceChar parseExp) ""
 
 
@@ -93,9 +94,9 @@ parseExp = P.choice
     P.label "lambda"
       $   brackets
       $   ExpLambda
-      <$> (parseIdent <?> "identifier")
+      <$> (parseIdent <|> parseIgnoredIdent)
       <*> surroundedBy (P.some hiddenSpaceChar) parseExp
-      <*> (parseIdent <?> "identifier")
+      <*> (parseIdent <|> parseIgnoredIdent)
 
   parseInBinding :: Parser NExp
   parseInBinding = P.label "in-binding" $ parens
@@ -148,9 +149,11 @@ parseExp = P.choice
 parseIdent :: Parser NIdent
 parseIdent = P.label "identifier" $ P.choice
   [ Ident <$> ((:) <$> P.letterChar <*> P.many P.alphaNumChar)
-  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,<>_:")
+  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,<>:")
   ]
 
+parseIgnoredIdent :: Parser NIdent
+parseIgnoredIdent = IdentIgnored <$ P.hidden (P.char '_')
 
 parseLit :: Parser NLiteral
 parseLit = P.label "literal" $ P.choice
@@ -176,10 +179,11 @@ parseLit = P.label "literal" $ P.choice
 
 
 hiddenSpaceChar :: Parser Char
-hiddenSpaceChar = P.hidden
-  (   P.spaceChar
-  <|> (' ' <$ (P.string "/*" *> P.manyTill L.charLiteral (P.string "*/")))
-  )
+hiddenSpaceChar = P.hidden (P.spaceChar <|> parseComment)
+ where
+  parseComment =
+    ' ' <$ (P.string "/*" *> P.manyTill L.charLiteral (P.string "*/"))
+
 
 parens = betweenChars '(' ')' . surroundedByMany hiddenSpaceChar
 brackets = betweenChars '[' ']' . surroundedByMany hiddenSpaceChar

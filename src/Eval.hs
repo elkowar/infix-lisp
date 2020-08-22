@@ -1,7 +1,8 @@
+{-# OPTIONS_GHC -Wall -fno-warn-unused-imports -fno-warn-missing-signatures -fno-warn-missing-pattern-synonym-signatures #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, PatternSynonyms #-}
 module Eval where
 
-
+import Prelude hiding (exp)
 import           Parse
 import qualified Data.List                     as L
 import           Data.Maybe                     ( fromMaybe )
@@ -11,17 +12,17 @@ import           Data.Bifunctor                 ( bimap
                                                 )
 
 
-data Value = VNum Int 
-           | VStr String 
-           | VBool Bool 
-           | VNil 
-           | VFunction Function 
-           | VTuple Value Value 
+data Value = VNum Int
+           | VStr String
+           | VBool Bool
+           | VNil
+           | VFunction Function
+           | VTuple Value Value
            deriving (Eq)
-data Function = Builtin (Value -> Value -> IO Value) | Lambda Env String NExp String
+data Function = Builtin (Value -> Value -> IO Value) | Lambda Env NIdent NExp NIdent
 
 instance Eq Function where
-  (==) (Lambda _ a1 exp1 b1) (Lambda _ a2 exp2 b2) = (a2, exp2, b2) == (a2, exp2, b2)
+  (==) (Lambda _ a1 exp1 b1) (Lambda _ a2 exp2 b2) = (a1, exp1, b1) == (a2, exp2, b2)
   (==) _ _ = False
 
 pattern VLambda a b c d = VFunction (Lambda a b c d)
@@ -38,7 +39,7 @@ instance Show Value where
 
 instance Show Function where
   show (Builtin _        ) = "builtin"
-  show (Lambda env a1 body a2) = unwords ["[", a1, show body, a2, "]"]
+  show (Lambda _ a1 body a2) = unwords ["[", show a1, show body, show a2, "]"]
 
 newtype Env = Env [(String , Value)] deriving (Show, Semigroup, Monoid)
 
@@ -47,7 +48,14 @@ newtype Env = Env [(String , Value)] deriving (Show, Semigroup, Monoid)
 runFunction :: Function -> Env -> Value -> Value -> IO Value
 runFunction (Builtin f) _ arg1 arg2 = f arg1 arg2
 runFunction (Lambda lambdaEnv argName1 exp argName2) env arg1 arg2 =
-  evalExp (Env [(argName1, arg1), (argName2, arg2)] <> lambdaEnv <> env) exp
+  evalExp (envFromArgs <> lambdaEnv <> env) exp
+    where
+      envFromArgs = Env $ case (argName1, argName2) of
+                            (Ident a, Ident b) -> [(a, arg1), (b, arg2)]
+                            (IdentIgnored, Ident b) -> [(b, arg2)]
+                            (Ident a, IdentIgnored) -> [(a, arg1)]
+                            _ -> []
+
 
 
 
@@ -100,19 +108,19 @@ builtins =
 
   builtinMakeTuple a b = pure $ VTuple a b
 
-  builtinTupleFirst _ (VTuple a b) = pure a
+  builtinTupleFirst _ (VTuple a _) = pure a
   builtinTupleFirst a b = illegalFunctionArguments "fst" [a, b]
 
-  builtinTupleSecond _ (VTuple a b) = pure b
+  builtinTupleSecond _ (VTuple _ b) = pure b
   builtinTupleSecond a b = illegalFunctionArguments "snd" [a, b]
 
   boolFunc :: String -> (Bool -> Bool -> Bool) -> Value -> Value -> IO Value
-  boolFunc name f (VBool a) (VBool b) = pure . VBool $ f a b
-  boolFunc name f a b = illegalFunctionArguments name [a, b]
+  boolFunc _ f (VBool a) (VBool b) = pure . VBool $ f a b
+  boolFunc name _ a b = illegalFunctionArguments name [a, b]
 
   numFunc :: String -> (Int -> Int -> Value) -> Value -> Value -> IO Value
-  numFunc name f (VNum a) (VNum b) = pure $ f a b
-  numFunc name f a b = illegalFunctionArguments name [a, b]
+  numFunc _ f (VNum a) (VNum b) = pure $ f a b
+  numFunc name _ a b = illegalFunctionArguments name [a, b]
 
 
 
@@ -129,9 +137,10 @@ evalExp env expression = case expression of
   ExpLit   lit -> pure $ fromLiteral lit
 
   ExpIdent (Ident ident) -> pure $ envLookup env ident
+  ExpIdent IdentIgnored -> error "Tried to reference ignored identifier"
 
-  ExpLambda (Ident argName1) body (Ident argName2) ->
-    pure $ VFunction $ Lambda env argName1 body argName2
+  ExpLambda arg1 body arg2 ->
+    pure $ VFunction $ Lambda env arg1 body arg2
 
   ExpInvocation arg1 exp arg2 -> evalExp env exp >>= \case
     VFunction func -> do
@@ -141,8 +150,8 @@ evalExp env expression = case expression of
     wannabeFunction -> error $ show wannabeFunction ++ " is not a function"
 
   ExpInBinding bindings blockExp -> do
-    bindings <- evalBindings env (fmap (first getName) bindings)
-    evalExp (Env bindings <> env) blockExp
+    bindings' <- evalBindings env (fmap (first getName) bindings)
+    evalExp (Env bindings' <> env) blockExp
 
   ExpCondition yesExp condExp noExp -> do
     condResult <- evalExp env condExp
@@ -169,14 +178,13 @@ fromLiteral lit = case lit of
   NilLit      -> VNil
 
 envLookup :: Env -> String -> Value
-envLoopup _ "_" = error "Tried to look for variable '_' in environment, but '_' is not a valid identifier"
 envLookup (Env env) name = case result of
     Just value -> snd value
-    Nothing -> error $ "Variable " ++ name ++ " is not in scope."
+    Nothing -> error $ "Variable `" ++ name ++ "` is not in scope."
   where
     envWithBuiltins = env ++ map (second VFunction) builtins
     result = L.find (\(n, _) -> n == name) envWithBuiltins
 
-
 getName :: NIdent -> String
 getName (Ident s) = s
+getName IdentIgnored = error "tried to get the name of ignored identifier `_`"
