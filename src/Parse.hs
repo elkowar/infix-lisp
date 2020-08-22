@@ -20,10 +20,11 @@ import           Control.Applicative            ( (<|>) )
 
 
 
-data NExp = ExpInBinding NIdent NExp NExp
+data NExp = ExpInBinding [(NIdent, NExp)] NExp
           | ExpCondition NExp NExp NExp
           | ExpInvocation NExp NExp NExp
           | ExpLambda NIdent NExp NIdent
+          | ExpList [NExp]
           | ExpLit NLiteral
           | ExpIdent NIdent
           deriving (Eq)
@@ -47,14 +48,15 @@ instance Show NLiteral where
 instance Show NExp where
   show (ExpCondition yesBody cond noBody) =
     unwords ["(", show yesBody, "<", show cond, ">", show noBody, ")"]
-  show (ExpInBinding name value exp) =
-    unwords ["( {", show name, "=", show value, "} in", show exp, ")"]
+  show (ExpInBinding bindings exp) =
+    unwords ["( {", show bindings, "} in", show exp, ")"] -- todo cleanup "showBindings"
   show (ExpInvocation exp1 ident exp2) =
     unwords ["(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
     unwords ["[", show arg1, show body, show arg2, "]"]
-  show (ExpLit   lit  ) = show lit
-  show (ExpIdent ident) = show ident
+  show (ExpLit   lit     ) = show lit
+  show (ExpIdent ident   ) = show ident
+  show (ExpList  elements) = show elements
 
 
 type Parser = P.Parsec Void String
@@ -71,6 +73,7 @@ parseExp = P.choice
   [ P.try parseInBinding
   , P.try parseConditional
   , P.try parseExpInvocation
+  , parseList
   , parseLambda
   , ExpLit <$> parseLit
   , ExpIdent <$> parseIdent
@@ -81,9 +84,9 @@ parseExp = P.choice
     P.label "invocation block"
       $   parens
       $   ExpInvocation
-      <$> parseExp
+      <$> (parseExp <|> (ExpLit NilLit <$ P.char '_'))
       <*> surroundedBy (P.some hiddenSpaceChar) invokableExpBlock
-      <*> parseExp
+      <*> (parseExp <|> (ExpLit NilLit <$ P.char '_'))
 
   parseLambda :: Parser NExp
   parseLambda =
@@ -95,16 +98,37 @@ parseExp = P.choice
       <*> (parseIdent <?> "identifier")
 
   parseInBinding :: Parser NExp
-  parseInBinding = P.label "in-binding" $ parens $ do
-    (name, valueExp) <- parens $ do
-      name <- parseIdent
-      surroundedByMany hiddenSpaceChar (P.char '=')
-      valueExp <- parseExp
-      pure (name, valueExp)
-    surroundedBySome hiddenSpaceChar $ P.string "in"
-    body <- parseExp
-    pure $ ExpInBinding name valueExp body
+  parseInBinding = P.label "in-binding" $ parens
+    (   ExpInBinding
+    <$> parseMapLiteral
+    <*  surroundedBySome hiddenSpaceChar (P.string "in")
+    <*> parseExp
+    )
 
+  parseMapLiteral :: Parser [(NIdent, NExp)]
+  parseMapLiteral =
+    P.label "map-literal"
+      $ curlies
+      $ surroundedByMany hiddenSpaceChar
+      $ P.sepEndBy1 parseSingleBinding
+                    (surroundedByMany hiddenSpaceChar (P.char ','))
+   where
+    parseSingleBinding =
+      (,)
+        <$> parseIdent
+        <*  surroundedBySome hiddenSpaceChar (P.char '=')
+        <*> parseExp
+
+  parseList :: Parser NExp
+  parseList = do
+    results <- P.label "list-expression" $ curlies $ surroundedByMany
+      hiddenSpaceChar
+      (parseExp `P.sepBy` surroundedByMany hiddenSpaceChar (P.char ','))
+    pure $ listToTupleList results
+   where
+    listToTupleList [] = ExpLit NilLit
+    listToTupleList (x : xs) =
+      ExpInvocation x (ExpIdent (Ident ",")) (listToTupleList xs)
 
   parseConditional :: Parser NExp
   parseConditional =
@@ -124,7 +148,7 @@ parseExp = P.choice
 parseIdent :: Parser NIdent
 parseIdent = P.label "identifier" $ P.choice
   [ Ident <$> ((:) <$> P.letterChar <*> P.many P.alphaNumChar)
-  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,_<>:")
+  , Ident <$> P.some (P.oneOf "/+.-*=$!%&,<>:")
   ]
 
 

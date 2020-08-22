@@ -6,6 +6,7 @@ import           Parse
 import qualified Data.List                     as L
 import           Data.Maybe                     ( fromMaybe )
 import           Data.Bifunctor                 ( bimap
+                                                , first
                                                 , second
                                                 )
 
@@ -139,9 +140,9 @@ evalExp env expression = case expression of
       runFunction func env res1 res2
     wannabeFunction -> error $ show wannabeFunction ++ " is not a function"
 
-  ExpInBinding (Ident name) valueExp blockExp -> do
-    storedValue <- evalExp env valueExp
-    evalExp (Env [(name, storedValue)] <> env) blockExp
+  ExpInBinding bindings blockExp -> do
+    bindings <- evalBindings env (fmap (first getName) bindings)
+    evalExp (Env bindings <> env) blockExp
 
   ExpCondition yesExp condExp noExp -> do
     condResult <- evalExp env condExp
@@ -152,6 +153,14 @@ evalExp env expression = case expression of
 
 
 
+evalBindings :: Env -> [(String, NExp)] -> IO [(String, Value)]
+evalBindings _ [] = pure []
+evalBindings env ((name, exp):xs) = do
+  result <- evalExp env exp
+  let newBinding = (name, result)
+  otherBindings <- evalBindings (env <> Env [newBinding]) xs
+  pure $ newBinding : otherBindings
+
 fromLiteral :: NLiteral -> Value
 fromLiteral lit = case lit of
   StringLit s -> VPrim $ VStr s
@@ -160,6 +169,7 @@ fromLiteral lit = case lit of
   NilLit      -> VPrim VNil
 
 envLookup :: Env -> String -> Value
+envLoopup _ "_" = error "Tried to look for variable '_' in environment, but '_' is not a valid identifier"
 envLookup (Env env) name = case result of
     Just value -> snd value
     Nothing -> error $ "Variable " ++ name ++ " is not in scope."

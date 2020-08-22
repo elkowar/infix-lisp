@@ -19,29 +19,27 @@ in
 
 
 (
-  (fizzBuzz = 
-    [_ 
-    (
-      (nil print "FizzBuzz")
-    <(((num % 3) == 0) && ((num % 5) == 0))>
-      (
-        (nil print "Fizz")
-      <((num % 3) == 0)>
+  { fizzBuzz = 
+      [_ 
         (
-          (nil print "buzz")
-        <((num % 5) == 0)>
-          (nil print num)
+          (nil print "FizzBuzz")
+        <(((num % 3) == 0) && ((num % 5) == 0))>
+          (
+            (nil print "Fizz")
+          <((num % 3) == 0)>
+            (
+              (nil print "buzz")
+            <((num % 5) == 0)>
+              (nil print num)
+            )
+          )
         )
-      )
-    )
-    num]
-  )
-in
-  (
-    (map = 
+      num]
+
+  , map = 
       [tuple 
         (
-          (tail = (_ snd tuple)) 
+          { tail = (_ snd tuple) , }
         in
           (
             (_ f (_ fst tuple)) 
@@ -50,18 +48,14 @@ in
           )
         )
       f]
-    )
-  in
-    (
-      (: = 
-        [lower
-          (lower , (((lower + 1) : upper) <(lower < upper)> nil))
-        upper]
-      )
-    in
-      ((1 : 100) map fizzBuzz)
-    )
-  )
+
+  , : = 
+      [lower
+        (lower , (((lower + 1) : upper) <(lower < upper)> nil))
+      upper]
+  , } 
+in
+  ((1 : 100) map fizzBuzz)
 )
 
 
