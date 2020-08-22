@@ -10,7 +10,7 @@ import           Data.Bifunctor                 ( bimap
                                                 )
 
 
-data Value = VPrim Primitive | VFunction Function deriving (Eq)
+data Value = VPrim Primitive | VFunction Function | VTuple Value Value deriving (Eq)
 data Primitive = VNum Int | VStr String | VBool Bool | VNil deriving (Eq)
 data Function = Builtin (Value -> Value -> IO Value) | Lambda Env String NExp String
 
@@ -27,6 +27,7 @@ pattern PatBuiltin f = VFunction (Builtin f)
 instance Show Value where
   show (VPrim p) = show p
   show (VFunction f) = show f
+  show (VTuple a b) = show (a, b)
 
 instance Show Primitive where
   show (VNum n) = if n == 69 then "69,... nice!" else show n
@@ -61,6 +62,10 @@ builtins =
   , ("&&", Builtin builtinAnd)
   , ("||", Builtin builtinOr)
   , ("==", Builtin builtinEq)
+  , ("!=", Builtin builtinNeq)
+  , (",", Builtin builtinMakeTuple)
+  , ("fst", Builtin builtinTupleFirst)
+  , ("snd", Builtin builtinTupleSecond)
   , ("print", Builtin builtinPrint)
   , ("readString", Builtin builtinReadString)
   , ("readInt", Builtin builtinReadInt)
@@ -76,12 +81,13 @@ builtins =
   builtinDiv   = numFunc "/" $ \a b -> PatNum $ a `div` b
   builtinLT    = numFunc "<" $ \a b -> PatBool $ a < b
   builtinGT    = numFunc ">" $ \a b -> PatBool $ a > b
-  
+
   builtinAnd = boolFunc "&&" (&&)
   builtinOr  = boolFunc "||" (||)
 
   builtinEq a b = pure . PatBool $ a == b
-  
+  builtinNeq a b = pure . PatBool $ a /= b
+
   builtinPrint _ value = let str = case value of PatStr s -> s
                                                  PatNum n -> show n
                                                  VPrim VNil -> "nil"
@@ -90,6 +96,14 @@ builtins =
 
   builtinReadString _ _ = PatStr <$> getLine
   builtinReadInt _ _ = PatNum <$> readLn
+
+  builtinMakeTuple a b = pure $ VTuple a b
+
+  builtinTupleFirst _ (VTuple a b) = pure a
+  builtinTupleFirst a b = illegalFunctionArguments "fst" [a, b]
+
+  builtinTupleSecond _ (VTuple a b) = pure b
+  builtinTupleSecond a b = illegalFunctionArguments "snd" [a, b]
 
   boolFunc :: String -> (Bool -> Bool -> Bool) -> Value -> Value -> IO Value
   boolFunc name f (PatBool a) (PatBool b) = pure . PatBool $ f a b
@@ -129,7 +143,7 @@ evalExp env expression = case expression of
     storedValue <- evalExp env valueExp
     evalExp (Env [(name, storedValue)] <> env) blockExp
 
-  ExpThenElse condExp yesExp noExp -> do
+  ExpCondition yesExp condExp noExp -> do
     condResult <- evalExp env condExp
     case condResult of
       PatBool True -> evalExp env yesExp
@@ -139,18 +153,19 @@ evalExp env expression = case expression of
 
 
 fromLiteral :: NLiteral -> Value
-fromLiteral lit = case lit of 
+fromLiteral lit = case lit of
   StringLit s -> VPrim $ VStr s
   IntLit    n -> VPrim $ VNum n
   BoolLit   b -> VPrim $ VBool b
+  NilLit      -> VPrim VNil
 
 envLookup :: Env -> String -> Value
 envLookup (Env env) name = case result of
     Just value -> snd value
     Nothing -> error $ "Variable " ++ name ++ " is not in scope."
-  where 
+  where
     envWithBuiltins = env ++ map (second VFunction) builtins
-    result = L.find (\(n, _) -> n == name) envWithBuiltins 
+    result = L.find (\(n, _) -> n == name) envWithBuiltins
 
 orNil :: Maybe Value -> Value
 orNil = fromMaybe (VPrim VNil)

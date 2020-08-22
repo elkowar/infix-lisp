@@ -21,7 +21,7 @@ import           Control.Applicative            ( (<|>) )
 
 
 data NExp = ExpInBinding NIdent NExp NExp
-          | ExpThenElse NExp NExp NExp
+          | ExpCondition NExp NExp NExp
           | ExpInvocation NExp NExp NExp
           | ExpLambda NIdent NExp NIdent
           | ExpLit NLiteral
@@ -45,20 +45,12 @@ instance Show NLiteral where
 
 
 instance Show NExp where
-  show (ExpThenElse cond yesBody noBody) = unwords
-    [ "ThenElse"
-    , "("
-    , show cond
-    , "then ("
-    , show yesBody
-    , "else"
-    , show noBody
-    , "))"
-    ]
-  show (ExpInBinding name value exp) = unwords
-    ["InBinding", "( {", show name, "=", show value, "} in", show exp, ")"]
+  show (ExpCondition yesBody cond noBody) =
+    unwords ["(", show yesBody, "<", show cond, ">", show noBody, ")"]
+  show (ExpInBinding name value exp) =
+    unwords ["( {", show name, "=", show value, "} in", show exp, ")"]
   show (ExpInvocation exp1 ident exp2) =
-    unwords ["Invocation", "(", show exp1, show ident, show exp2, ")"]
+    unwords ["(", show exp1, show ident, show exp2, ")"]
   show (ExpLambda arg1 body arg2) =
     unwords ["[", show arg1, show body, show arg2, "]"]
   show (ExpLit   lit  ) = show lit
@@ -109,21 +101,19 @@ parseExp = P.choice
       surroundedByMany hiddenSpaceChar (P.char '=')
       valueExp <- parseExp
       pure (name, valueExp)
-    surroundedBy (P.some hiddenSpaceChar) $ P.string "in"
+    surroundedBySome hiddenSpaceChar $ P.string "in"
     body <- parseExp
     pure $ ExpInBinding name valueExp body
 
 
   parseThenElse :: Parser NExp
-  parseThenElse = P.label "then-else" $ parens $ do
-    condExp <- parseExp
-    surroundedBy (P.some hiddenSpaceChar) (P.string "then")
-    (yesExp, noExp) <- parens $ do
-      yesExp <- parseExp
-      surroundedBy (P.some hiddenSpaceChar) $ P.string "else"
-      noExp <- parseExp
-      pure (yesExp, noExp)
-    pure $ ExpThenElse condExp yesExp noExp
+  parseThenElse =
+    P.label "condition"
+      $   parens
+      $   ExpCondition
+      <$> parseExp
+      <*> (surroundedBySome hiddenSpaceChar . betweenChars '<' '>' $ parseExp)
+      <*> parseExp
 
 
   invokableExpBlock :: Parser NExp
@@ -148,7 +138,10 @@ parseLit = P.label "literal" $ P.choice
  where
   parseStringLit :: Parser NLiteral
   parseStringLit =
-    StringLit <$> (P.char '"' *> P.manyTill L.charLiteral (P.char '"'))
+    StringLit
+      <$> (  (P.char '"' <|> P.char '\'')
+          *> P.manyTill L.charLiteral (P.char '"' <|> P.char '\'')
+          )
 
   parseBoolLit :: Parser NLiteral
   parseBoolLit = P.choice
@@ -158,18 +151,15 @@ parseLit = P.label "literal" $ P.choice
   parseInt = L.signed (pure ()) L.decimal
 
 
-
-ignoreSpaces :: Parser ()
-ignoreSpaces = P.skipMany hiddenSpaceChar
-
 hiddenSpaceChar :: Parser Char
-hiddenSpaceChar = P.hidden P.spaceChar
+hiddenSpaceChar = P.hidden
+  (   P.spaceChar
+  <|> (' ' <$ (P.string "/*" *> P.manyTill L.charLiteral (P.string "*/")))
+  )
 
-parens = P.between (P.char '(') (P.char ')') . surroundedByMany hiddenSpaceChar
-brackets =
-  P.between (P.char '[') (P.char ']') . surroundedByMany hiddenSpaceChar
-curlies =
-  P.between (P.char '{') (P.char '}') . surroundedByMany hiddenSpaceChar
+parens = betweenChars '(' ')' . surroundedByMany hiddenSpaceChar
+brackets = betweenChars '[' ']' . surroundedByMany hiddenSpaceChar
+curlies = betweenChars '{' '}' . surroundedByMany hiddenSpaceChar
 
 surroundedBy :: Parser s -> Parser a -> Parser a
 surroundedBy surround p = surround *> p <* surround
@@ -177,8 +167,8 @@ surroundedBy surround p = surround *> p <* surround
 surroundedByMany :: Parser s -> Parser a -> Parser a
 surroundedByMany surround p = P.skipMany surround *> p <* P.skipMany surround
 
-sc :: Parser ()
-sc = L.space (void hiddenSpaceChar)
-             (L.skipLineComment "//")
-             (L.skipBlockComment "/*" "*/")
+surroundedBySome :: Parser s -> Parser a -> Parser a
+surroundedBySome surround p = P.skipSome surround *> p <* P.skipSome surround
 
+betweenChars :: Char -> Char -> Parser a -> Parser a
+betweenChars l r = P.between (P.char l) (P.char r)

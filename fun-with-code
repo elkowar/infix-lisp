@@ -1,30 +1,48 @@
+
 (
   (num = (nil readInt nil)) 
 in 
   (
-    (((num % 3) == 0) && ((num % 5) == 0))
-  then 
+    (nil print "FizzBuzz")
+  <(((num % 3) == 0) && ((num % 5) == 0))>
     (
-      (nil print "FizzBuzz")
-    else 
+      (nil print "Fizz")
+    <((num % 3) == 0)>
       (
-        ((num % 3) == 0)
-      then 
-        (
-          (nil print "Fizz")
-        else
-          (
-            ((num % 5) == 0)
-          then
-            (
-              (nil print "buzz")
-            else 
-              (nil print num)
-            )
-          )
-        )
+        (nil print "buzz")
+      <((num % 5) == 0)>
+        (nil print num)
       )
     )
   )
 )
+
+(
+ (map = [tuple 
+        (
+          (tail = (_ snd tuple)) 
+        in
+          (
+            (_ f (_ fst tuple)) 
+          ,
+            ((tail map f) <(tail != nil)> nil)
+          )
+        )
+        f])
+in
+ ((1 , (2 , (3 , nil))) map [_ (x + 1) x])
+)
+
+
+
+
+( (map = [tuple ( (_ f (_ fst tuple)) , ( ((_ snd tuple) map f) <((_ snd tuple) != nil)> nil)) f]) in ((1 , (2 , (3 , nil))) map [_ (x + 1) x]))
+
+
+( (map = [tuple ( (_ f (_ fst tuple)) , ( (snd map (_ snd tuple)) <((_ snd tuple) != nil)> nil)) f]) in ((1 , (2 , (3 , nil))) map [_ (x + 1) x]))
+
+
 ((flip2 = [_ [a [b (a (b f c) d) c] d] f]) in ((x = [a [b ((a + b) + (c + d)) c] d]) in ("a" ("b" (nil flip2 x) "c") "d")))
+
+
+( (num = (nil readInt nil)) in ( (nil print "FizzBuzz") <(((num % 3) == 0) && ((num % 5) == 0))> ( (nil print "Fizz") <((num % 3) == 0)> ( (nil print "buzz") <((num % 5) == 0)> (nil print num)))))

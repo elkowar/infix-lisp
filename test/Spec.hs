@@ -6,7 +6,7 @@ import           Eval
 
 main :: IO ()
 main = do
-  --testParser
+  testParser
   _ <- testEval
   pure ()
 
@@ -19,11 +19,11 @@ testEval = do
   --testEvalExp "(nil print [x (x + 1) y])"
   testEvalExp "(( x = 1 ) in (x + 2))"
   testEvalExp "(( add = [a (a + b) b] ) in (2 add 5))"
-  testEvalExp "((1 == 1) then (\"yes\" else \"no\"))"
+  testEvalExp "(\"yes\" <(1 == 1)> \"no\")"
   testEvalExp
-    "((not = [_ (value then (false else true)) value]) in (_ not true))"
+    "((not = [_ (false <value> true) value]) in (_ not true))"
   testEvalExp
-    "((not = [_ (value then (false else true)) value]) in (_ not false))"
+    "((not = [_ (false <value> true) value]) in (_ not false))"
   testEvalExp "(1 [a (a + b) b] 1)"
   testEvalExp "((add4 = [a [b ((a + b) + (c + d)) c] d]) in (1 (1 add4 1) 1))"
 
@@ -53,5 +53,5 @@ testParser = do
   parseTest "( nil print [ x ( x + 1 ) y ] )"
   parseTest "( nil [ _ ( x + 1 ) x ] 5 )"
   parseTest "( ( x = 1 ) in x)"
-  parseTest "(1 then (12 else 0))"
+  parseTest "(1 <(true && false)> 2)"
   parseTest "((add4 = [a [b ((a + b) + (c + d)) c] d]) in (1 (1 add4 1) 1))"
