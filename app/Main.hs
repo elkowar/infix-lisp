@@ -24,12 +24,16 @@ cmd input = dontCrash $ do
 ini :: Repl ()
 ini =
   liftIO $ putStrLn "Have fun in one of the dumbest languages in existance!"
+  
+final :: Repl ExitDecision
+final = pure Exit
+
 
 completer :: Monad m => WordCompleter m
 completer word = pure []
 
 repl :: IO ()
-repl = evalRepl (pure ">>> ") cmd [] Nothing (Word completer) ini
+repl = evalRepl (const $ pure ">>> ") cmd [] Nothing Nothing (Word completer) ini final 
 
 main :: IO ()
 main = do
