@@ -1,5 +1,8 @@
 FROM fpco/stack-build-small
 
-ADD . /app
+ADD . /app/
 WORKDIR /app
-CMD ["stack" "run"]
+RUN ls
+RUN stack build --jobs 16
+RUN cp "$(stack path --local-install-root)"/bin/* /app/infix-lisp
+CMD /app/infix-lisp
