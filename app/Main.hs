@@ -23,7 +23,7 @@ cmd input = dontCrash $ do
 
 ini :: Repl ()
 ini =
-  liftIO $ putStrLn "Have fun in one of the dumbest languages in existance!"
+  liftIO $ putStrLn "Have fun in one of the dumbest languages in existence!"
   
 final :: Repl ExitDecision
 final = pure Exit
