@@ -13,10 +13,10 @@ tests:
 copyright: 2020 Author name here
 maintainer: example@example.com
 dependencies:
-- string-qq
-- repline
 - text
-- containers
+- string-qq == 0.0.4
+- repline >= 0.4.0.0 && < 0.5.0.0
+- containers >= 0.6
 - base >= 4.7 && < 5
 - megaparsec >= 8.0.0 && < 8.1
 name: infix-lisp
