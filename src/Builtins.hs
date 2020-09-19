@@ -28,6 +28,7 @@ builtins = M.fromList
   , ("print"     , Builtin builtinPrint)
   , ("readString", Builtin builtinReadString)
   , ("readInt"   , Builtin builtinReadInt)
+  , ("toString"  , Builtin builtinToString)
   ]
  where
   builtinPlus (VNum a) (VNum b) = pure . VNum $ a + b
@@ -65,6 +66,8 @@ builtins = M.fromList
 
   builtinTupleSecond _ (VTuple _ b) = pure b
   builtinTupleSecond a b            = illegalFunctionArguments "snd" [a, b]
+  
+  builtinToString _ value = pure . VStr $ show value
 
   builtinToCharList :: Value -> Value -> IO Value
   builtinToCharList _ (VStr str) = case str of
@@ -79,6 +82,7 @@ builtins = M.fromList
   numFunc :: String -> (Int -> Int -> Value) -> Value -> Value -> IO Value
   numFunc _    f (VNum a) (VNum b) = pure $ f a b
   numFunc name _ a        b        = illegalFunctionArguments name [a, b]
+
 
 
 

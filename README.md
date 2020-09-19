@@ -76,6 +76,32 @@ in
 )
 ```
 
+
+### a quine
+```lisp
+( { x = 
+    [_ 
+      ( 
+        _
+      print 
+        ( 
+          "( { x = " 
+        + 
+          ( 
+            (_ toString x) 
+          + 
+            " } in ( _ x _ ) ) "
+          ) 
+        )
+      )
+    _] 
+  } 
+in 
+  (_ x _)
+)
+
+```
+
 ## Syntax
 
 The syntax of infix-lisp is actually quite simple,... it's just also very ugly.
