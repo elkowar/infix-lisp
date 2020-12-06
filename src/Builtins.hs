@@ -22,11 +22,14 @@ builtins = M.fromList
   , ("=="        , Builtin builtinEq)
   , ("!="        , Builtin builtinNeq)
   , (","         , Builtin builtinMakeTuple)
-  , ("fst"       , Builtin builtinTupleFirst)
-  , ("snd"       , Builtin builtinTupleSecond)
+  , ("fst"       , Builtin builtinFirst)
+  , ("snd"       , Builtin builtinSecond)
+  , ("head"      , Builtin builtinFirst)
+  , ("tail"      , Builtin builtinSecond)
   , ("toCharList", Builtin builtinToCharList)
   , ("print"     , Builtin builtinPrint)
   , ("readString", Builtin builtinReadString)
+  , ("readFile"  , Builtin builtinReadFile)
   , ("readInt"   , Builtin builtinReadInt)
   , ("toString"  , Builtin builtinToString)
   ]
@@ -59,13 +62,18 @@ builtins = M.fromList
   builtinReadString _ _ = VStr <$> getLine
   builtinReadInt _ _ = VNum <$> readLn
 
+  builtinReadFile _ (VStr path) = VStr <$> readFile path
+  builtinReadFile a b = illegalFunctionArguments "readFile" [a, b]
+
   builtinMakeTuple a b = pure $ VTuple a b
 
-  builtinTupleFirst _ (VTuple a _) = pure a
-  builtinTupleFirst a b            = illegalFunctionArguments "fst" [a, b]
+  builtinFirst _ (VTuple a _) = pure a
+  builtinFirst _ (VStr (x:_)) = pure $ VStr [x]
+  builtinFirst a b            = illegalFunctionArguments "fst" [a, b]
 
-  builtinTupleSecond _ (VTuple _ b) = pure b
-  builtinTupleSecond a b            = illegalFunctionArguments "snd" [a, b]
+  builtinSecond _ (VTuple _ b) = pure b
+  builtinSecond _ (VStr (_:xs)) = pure $ VStr xs
+  builtinSecond a b            = illegalFunctionArguments "snd" [a, b]
   
   builtinToString _ value = pure . VStr $ show value
 
